@@ -18,7 +18,7 @@ int main()
     {
 	for(int i = 0; i < levels; i++)
 	{
-	    table[j][i] = (PERIOD_TICKS/2) * sin(2*M_PI*1*time + j*2*M_PI/3) + PERIOD_TICKS/2;
+	    table[j][i] = (PERIOD_TICKS/4) * sin(2*M_PI*1*time + j*2*M_PI/3) + (PERIOD_TICKS/2);
 	    time += time_delta;
 	}
     }
