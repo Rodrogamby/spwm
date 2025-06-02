@@ -27,6 +27,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 COM_InitTypeDef BspCOMInit;
+ADC_HandleTypeDef hadc1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim6;
@@ -40,6 +41,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 static void toggleUserLed(void);
 /* USER CODE END PFP */
@@ -51,6 +53,9 @@ const uint16_t lookup_size = 100;
 const uint16_t lookup1[100] = { 800, 849, 898, 946, 994, 1042, 1088, 1133, 1177, 1220, 1260, 1299, 1336, 1371, 1404, 1434, 1461, 1487, 1509, 1528, 1545, 1559, 1570, 1577, 1582, 1584, 1582, 1577, 1570, 1559, 1545, 1528, 1509, 1487, 1461, 1434, 1404, 1371, 1336, 1299, 1260, 1220, 1177, 1133, 1088, 1042, 994, 946, 898, 849, 799, 750, 701, 653, 605, 557, 511, 466, 422, 379, 339, 300, 263, 228, 195, 165, 138, 112, 90, 71, 54, 40, 29, 22, 17, 16, 17, 22, 29, 40, 54, 71, 90, 112, 138, 165, 195, 228, 263, 300, 339, 379, 422, 466, 511, 557, 605, 653, 701, 750 };
 const uint16_t lookup2[100] = { 1478, 1453, 1424, 1393, 1360, 1324, 1286, 1247, 1206, 1163, 1118, 1073, 1026, 979, 930, 881, 832, 783, 734, 685, 636, 589, 542, 496, 451, 407, 366, 325, 287, 251, 217, 185, 156, 129, 105, 83, 65, 49, 36, 26, 20, 16, 16, 18, 24, 33, 44, 59, 77, 97, 121, 146, 175, 206, 239, 275, 313, 352, 393, 436, 481, 526, 573, 620, 669, 718, 767, 816, 865, 914, 963, 1010, 1057, 1103, 1148, 1192, 1233, 1274, 1312, 1348, 1382, 1414, 1443, 1470, 1494, 1516, 1534, 1550, 1563, 1573, 1579, 1583, 1583, 1581, 1575, 1566, 1555, 1540, 1522, 1502 };
 const uint16_t lookup3[100] = { 121, 97, 77, 59, 44, 33, 24, 18, 16, 16, 20, 26, 36, 49, 65, 83, 105, 129, 156, 185, 217, 251, 287, 325, 366, 407, 451, 496, 542, 589, 636, 685, 734, 783, 832, 881, 930, 979, 1026, 1073, 1118, 1163, 1206, 1247, 1286, 1324, 1360, 1393, 1424, 1453, 1478, 1502, 1522, 1540, 1555, 1566, 1575, 1581, 1583, 1583, 1579, 1573, 1563, 1550, 1534, 1516, 1494, 1470, 1443, 1414, 1382, 1348, 1312, 1274, 1233, 1192, 1148, 1103, 1057, 1010, 963, 914, 865, 816, 767, 718, 669, 620, 573, 526, 481, 436, 393, 352, 313, 275, 239, 206, 175, 146 };
+
+uint16_t AD_RES = 0;
+
 /* USER CODE END 0 */
 
 /**
@@ -70,7 +75,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -84,8 +88,11 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM6_Init();
   MX_TIM1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
+  // Calibrate The ADC On Power-Up For Better Accuracy
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
   HAL_TIM_Base_Start_IT(&htim6);
 
   /* USER CODE END 2 */
@@ -109,9 +116,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  /*
-   * Timer 6 interval should be steps / 2*output_frequency
-   */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
@@ -119,8 +123,19 @@ int main(void)
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
   __HAL_TIM_ENABLE_IT(&htim6, TIM_IT_UPDATE);
+
+  HAL_ADC_Start_IT(&hadc1);
+
   while (1)
   {
+	  if(AD_RES > 1024)
+	  {
+		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+	  }
+	  else
+	  {
+		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -175,6 +190,65 @@ void SystemClock_Config(void)
   /** Configure the programming delay
   */
   __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_0);
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.SamplingMode = ADC_SAMPLING_MODE_NORMAL;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -345,12 +419,16 @@ void toggleUserLed(void)
 	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 }
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	AD_RES = HAL_ADC_GetValue(&hadc1);
+}
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if(htim == &htim6)
     {
-    	toggleUserLed(); // just for debug, check on PA5
+    	//toggleUserLed(); // just for debug, check on PA5
         lookup_index++;
         if(lookup_index >= lookup_size)
         {
